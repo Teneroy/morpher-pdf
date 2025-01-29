@@ -4,12 +4,24 @@ import os
 from pathlib import Path
 import fitz  # PyMuPDF
 import hashlib
+import math
 import numpy as np
 
 class BaseConverter(ABC):
-    def __init__(self, doc_path: str, openai_key: str):
+    def __init__(self, doc_path: str, openai_key: str, chunk_size: int = 10, max_chunks: int = 10):
+        """
+        Initialize the converter.
+        
+        Args:
+            doc_path (str): Path to the document
+            openai_key (str): OpenAI API key
+            chunk_size (int): Number of pages per chunk
+            max_chunks (int): Maximum number of chunks to process
+        """
         self.doc_path = doc_path
         self.openai_key = openai_key
+        self.chunk_size = chunk_size
+        self.max_chunks = max_chunks
         self.images_by_page: Dict[int, List[Tuple[str, bytes]]] = {}
         self.page_contents: List[str] = []
         
@@ -341,9 +353,33 @@ class BaseConverter(ABC):
         
         return page_images
     
-    def _split_pages(self, pages: List[bytes]) -> List[bytes]:
-        """Split pages into processable chunks"""
-        pass
+    def _split_pages(self, pages: List[bytes]) -> List[List[bytes]]:
+        """
+        Split pages into processable chunks.
+        
+        Args:
+            pages (List[bytes]): List of page images as bytes
+            
+        Returns:
+            List[List[bytes]]: List of chunks, where each chunk is a list of page images
+        """
+        total_pages = len(pages)
+        if total_pages == 0:
+            return []
+        
+        # Calculate number of chunks
+        num_chunks = min(self.max_chunks, max(1, math.ceil(total_pages / self.chunk_size)))
+        
+        # Calculate actual chunk size based on number of chunks
+        actual_chunk_size = math.ceil(total_pages / num_chunks)
+        
+        # Split pages into chunks
+        chunks = []
+        for i in range(0, total_pages, actual_chunk_size):
+            chunk = pages[i:i + actual_chunk_size]
+            chunks.append(chunk)
+        
+        return chunks
     
     def _process_chunks_parallel(self, chunks: List[bytes]) -> List[str]:
         """Process chunks in parallel using LLM"""
