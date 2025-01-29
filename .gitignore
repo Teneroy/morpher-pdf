@@ -172,3 +172,4 @@ cython_debug/
 
 data/
 main.py
+.DS_Store
