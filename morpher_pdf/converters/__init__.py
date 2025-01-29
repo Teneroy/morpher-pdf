@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import base64
 from typing import Dict, List, Tuple, Union
 import os
 from pathlib import Path
@@ -6,6 +7,9 @@ import fitz  # PyMuPDF
 import hashlib
 import math
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from openai import OpenAI
 
 class BaseConverter(ABC):
     def __init__(self, doc_path: str, openai_key: str, chunk_size: int = 10, max_chunks: int = 10):
@@ -48,8 +52,8 @@ class BaseConverter(ABC):
         return final_text, all_images
     
     @abstractmethod
-    def _process_chunk(self, chunk: bytes) -> str:
-        """Process a single chunk using LLM"""
+    def _process_page(self, page: bytes) -> str:
+        """Process a single page using LLM"""
         pass
     
     def _extract_images(self):
@@ -381,9 +385,47 @@ class BaseConverter(ABC):
         
         return chunks
     
-    def _process_chunks_parallel(self, chunks: List[bytes]) -> List[str]:
-        """Process chunks in parallel using LLM"""
-        pass
+    def _process_chunks_parallel(self, chunks: List[List[bytes]]) -> List[str]:
+        """
+        Process chunks in parallel using multiple threads.
+        
+        Args:
+            chunks (List[List[bytes]]): List of chunks, where each chunk is a list of page images
+            
+        Returns:
+            List[str]: List of processed content, one entry per page
+        """
+        all_results = []
+        
+        # Process a single chunk
+        def process_chunk(chunk: List[bytes]) -> List[str]:
+            return [self._process_page(page) for page in chunk]
+        
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor() as executor:
+            # Submit all chunks for processing
+            future_to_chunk = {
+                executor.submit(process_chunk, chunk): i 
+                for i, chunk in enumerate(chunks)
+            }
+            
+            # Collect results as they complete
+            chunk_results = [[] for _ in chunks]
+            for future in as_completed(future_to_chunk):
+                chunk_idx = future_to_chunk[future]
+                try:
+                    result = future.result()
+                    chunk_results[chunk_idx] = result
+                except Exception as e:
+                    print(f"Error processing chunk {chunk_idx}: {str(e)}")
+                    # Insert empty strings for failed pages
+                    chunk_results[chunk_idx] = ["" for _ in chunks[chunk_idx]]
+        
+        # Merge results from all chunks in order
+        for chunk_result in chunk_results:
+            all_results.extend(chunk_result)
+        
+        return all_results
     
     def _merge_images(self) -> List[str]:
         """Merge all images into a single array"""
