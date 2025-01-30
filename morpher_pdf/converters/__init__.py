@@ -12,23 +12,33 @@ import re
 
 from openai import OpenAI
 
+from llm.factory import LLMFactory
+
 class BaseConverter(ABC):
-    def __init__(self, doc_path: str, openai_key: str, chunk_size: int = 10, max_chunks: int = 10):
+    def __init__(self, 
+                 doc_path: str, 
+                 api_key: str, 
+                 llm_type: str = "gpt4-vision",
+                 chunk_size: int = 10, 
+                 max_chunks: int = 10):
         """
         Initialize the converter.
         
         Args:
             doc_path (str): Path to the document
-            openai_key (str): OpenAI API key
+            api_key (str): API key for the LLM service
+            llm_type (str): Type of LLM to use (default: "gpt4-vision")
             chunk_size (int): Number of pages per chunk
             max_chunks (int): Maximum number of chunks to process
         """
         self.doc_path = doc_path
-        self.openai_key = openai_key
+        self.api_key = api_key
+        self.llm_type = llm_type
         self.chunk_size = chunk_size
         self.max_chunks = max_chunks
         self.images_by_page: Dict[int, List[Tuple[str, bytes]]] = {}
         self.page_contents: List[str] = []
+        self.llm_client = LLMFactory.create_client(llm_type, api_key)
         
     def convert(self) -> Tuple[str, List[str]]:
         """Main conversion pipeline"""
