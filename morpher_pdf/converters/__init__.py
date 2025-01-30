@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import base64
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
 import os
 from pathlib import Path
 import fitz  # PyMuPDF
@@ -8,6 +8,7 @@ import hashlib
 import math
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
 from openai import OpenAI
 
@@ -349,7 +350,7 @@ class BaseConverter(ABC):
                 # Get the page's pixmap (image representation)
                 # Using a zoom factor of 2 for better quality
                 # Using RGB color space (no alpha channel)
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
                 
                 # Convert pixmap to PNG bytes
                 image_bytes = pix.tobytes("png")
@@ -434,3 +435,33 @@ class BaseConverter(ABC):
     def _merge_content(self) -> str:
         """Merge all processed content into final document"""
         pass
+
+    def _rewrite_page(self, content: str) -> Optional[str]:
+        """
+        Extract markdown content from XML tags.
+        
+        Args:
+            content (str): Raw content with XML tags
+            
+        Returns:
+            Optional[str]: Extracted markdown content or None if no valid content found
+        """
+        try:
+            # Find content between <markdown> tags using regex
+            pattern = r'<markdown>(.*?)</markdown>'
+            # Use re.DOTALL to match across multiple lines
+            match = re.search(pattern, content, re.DOTALL)
+            
+            if match:
+                # Extract and clean the content
+                markdown_content = match.group(1)
+                # Remove leading/trailing whitespace while preserving internal formatting
+                markdown_content = markdown_content.strip()
+                return markdown_content
+            
+            print("Warning: No markdown tags found in content")
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting markdown content: {str(e)}")
+            return None

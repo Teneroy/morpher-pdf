@@ -1,5 +1,7 @@
 import base64
 from openai import OpenAI
+
+from llm.prompts import MARKDOWN_CONVERTER_PROMPT
 from . import BaseConverter
 from typing import List
 
@@ -18,18 +20,19 @@ class MarkdownConverter(BaseConverter):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Translate the following image in German. Return the text in MD format preserving the original formatting. Every formula should be in LaTeX format.",
+                            "text": MARKDOWN_CONVERTER_PROMPT,
                         },
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                            "image_url": {"url": f"data:image/png;base64,{base64_image}"},
                         },
                     ],
                 }
             ],
+            temperature=0.3,
         )
-        print(response.choices[0].message.content)
-        return response.choices[0].message.content
+        # self._rewrite_page(response.choices[0].message.content)
+        return self._rewrite_page(response.choices[0].message.content)
     
     def _merge_content(self) -> str:
         """Merge content with Markdown-specific formatting"""
