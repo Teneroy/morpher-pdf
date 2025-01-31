@@ -12,5 +12,5 @@ class MarkdownConverter(BaseConverter):
         """Merge content with Markdown-specific formatting"""
         # Join pages with proper markdown formatting
         # Handle image references in markdown format
-        merged_content = "\n\n".join(self.page_contents)
+        merged_content = "\n".join(self.page_contents)
         return merged_content

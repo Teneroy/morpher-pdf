@@ -31,7 +31,7 @@ class GPT4VisionClient(BaseLLMClient):
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
         
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "user",
@@ -44,7 +44,10 @@ class GPT4VisionClient(BaseLLMClient):
                     ],
                 }
             ],
-            temperature=0.3,
+            temperature=0,
+            frequency_penalty=0,
+            presence_penalty=0,
+            top_p=1,
         )
 
         return response.choices[0].message.content
