@@ -9,15 +9,23 @@ import math
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
+from dataclasses import dataclass
 
 from openai import OpenAI
 
-from llm.factory import LLMFactory
+from llm.factory import LLMFactory, LLMType
+
+@dataclass
+class PageImage:
+    """Represents a PDF page converted to an image"""
+    page_number: int
+    image_bytes: bytes
 
 class BaseConverter(ABC):
     def __init__(self, 
                  doc_path: str, 
                  api_key: str, 
+                 judge_api_key: str,
                  llm_type: str = "gpt4-vision",
                  chunk_size: int = 10, 
                  max_chunks: int = 10):
@@ -33,13 +41,15 @@ class BaseConverter(ABC):
         """
         self.doc_path = doc_path
         self.api_key = api_key
+        self.judge_api_key = judge_api_key
         self.llm_type = llm_type
         self.chunk_size = chunk_size
         self.max_chunks = max_chunks
         self.images_by_page: Dict[int, List[Tuple[str, bytes]]] = {}
         self.page_contents: List[str] = []
         self.llm_client = LLMFactory.create_client(llm_type, api_key)
-        
+        self.llm_judge = LLMFactory.create_client(LLMType.GEMINI_FLASH_2, judge_api_key)
+
     def convert(self) -> Tuple[str, List[str]]:
         """Main conversion pipeline"""
         # Load PDF and extract images
@@ -63,7 +73,7 @@ class BaseConverter(ABC):
         return final_text, all_images
     
     @abstractmethod
-    def _process_page(self, page: bytes) -> str:
+    def _process_page(self, page: bytes, page_number: int) -> str:
         """Process a single page using LLM"""
         pass
     
@@ -348,35 +358,36 @@ class BaseConverter(ABC):
         except Exception as e:
             print(f"Warning: Failed to extract page region on page {page_num}: {str(e)}")
     
-    def _pdf_to_images(self) -> List[bytes]:
-        """Convert PDF pages to images"""
+    def _pdf_to_images(self) -> List[PageImage]:
+        """Convert PDF pages to images
+        
+        Returns:
+            List[PageImage]: List of PageImage objects containing page number and image bytes
+        """
         page_images = []
         
-        # Open PDF using context manager
         with fitz.open(self.doc_path) as pdf_document:
             for page_num in range(len(pdf_document)):
                 page = pdf_document[page_num]
                 
-                # Get the page's pixmap (image representation)
-                # Using a zoom factor of 2 for better quality
-                # Using RGB color space (no alpha channel)
-                pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
+                # Get the page's pixmap with zoom factor of 3
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                 
-                # Convert pixmap to PNG bytes
+                # Convert pixmap to PNG bytes and store with page number
                 image_bytes = pix.tobytes("png")
-                page_images.append(image_bytes)
+                page_images.append(PageImage(page_number=page_num, image_bytes=image_bytes))
         
         return page_images
     
-    def _split_pages(self, pages: List[bytes]) -> List[List[bytes]]:
+    def _split_pages(self, pages: List[PageImage]) -> List[List[PageImage]]:
         """
         Split pages into processable chunks.
         
         Args:
-            pages (List[bytes]): List of page images as bytes
+            pages (List[PageImage]): List of PageImage objects
             
         Returns:
-            List[List[bytes]]: List of chunks, where each chunk is a list of page images
+            List[List[PageImage]]: List of chunks, where each chunk is a list of PageImage objects
         """
         total_pages = len(pages)
         if total_pages == 0:
@@ -396,47 +407,42 @@ class BaseConverter(ABC):
         
         return chunks
     
-    def _process_chunks_parallel(self, chunks: List[List[bytes]]) -> List[str]:
+    def _process_chunks_parallel(self, chunks: List[List[PageImage]]) -> List[str]:
         """
         Process chunks in parallel using multiple threads.
         
         Args:
-            chunks (List[List[bytes]]): List of chunks, where each chunk is a list of page images
+            chunks (List[List[PageImage]]): List of chunks, where each chunk is a list of PageImage objects
             
         Returns:
             List[str]: List of processed content, one entry per page
         """
-        all_results = []
+        # Initialize results list with None values for all pages
+        max_page = max(page.page_number for chunk in chunks for page in chunk)
+        all_results = [None] * (max_page + 1)
         
-        # Process a single chunk
-        def process_chunk(chunk: List[bytes]) -> List[str]:
-            return [self._process_page(page) for page in chunk]
+        def process_chunk(chunk: List[PageImage]) -> List[Tuple[int, str]]:
+            return [(page.page_number, self._process_page(page.image_bytes, page.page_number)) 
+                    for page in chunk]
         
-        # Use ThreadPoolExecutor for parallel processing
         with ThreadPoolExecutor() as executor:
-            # Submit all chunks for processing
             future_to_chunk = {
                 executor.submit(process_chunk, chunk): i 
                 for i, chunk in enumerate(chunks)
             }
             
             # Collect results as they complete
-            chunk_results = [[] for _ in chunks]
             for future in as_completed(future_to_chunk):
-                chunk_idx = future_to_chunk[future]
                 try:
-                    result = future.result()
-                    chunk_results[chunk_idx] = result
+                    # Results contain page numbers
+                    for page_num, content in future.result():
+                        all_results[page_num] = content
                 except Exception as e:
-                    print(f"Error processing chunk {chunk_idx}: {str(e)}")
-                    # Insert empty strings for failed pages
-                    chunk_results[chunk_idx] = ["" for _ in chunks[chunk_idx]]
+                    print(f"Error processing chunk: {str(e)}")
+                    # Failed pages remain None in all_results
         
-        # Merge results from all chunks in order
-        for chunk_result in chunk_results:
-            all_results.extend(chunk_result)
-        
-        return all_results
+        # Replace any None values with empty strings
+        return [result if result is not None else "" for result in all_results]
     
     def _merge_images(self) -> List[str]:
         """Merge all images into a single array"""
