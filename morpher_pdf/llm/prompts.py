@@ -247,8 +247,11 @@ MARKDOWN_CONVERTER_PROMPT_GEMINI_2_v1 = """
 
   <code_formatting>
     <rules>
-      <rule>Programming code or algorithms should be surrounded by ```</rule>
+      <rule>Programming code should be surrounded by ```</rule>
       <rule>Proper tabulation should be used for code</rule>
+      <rule>Add newline before and after code block</rule>
+      <rule>Never put tables with the code block</rule>
+      <rule>When you see a table, don't cover it with code block</rule>
     </rules>
     <examples>
       <example>
@@ -261,12 +264,36 @@ MARKDOWN_CONVERTER_PROMPT_GEMINI_2_v1 = """
         ```
       </example>
       <example>
+        some text
+
         ```
         algorithm or pseudocode
         ```
+
+        some text
       </example>
     </examples>
   </code_formatting>
+
+  <table_formatting>
+    <rules>
+      <rule>Add newline after each table</rule>
+      <rule>Add newline before each table</rule>
+      <rule>Never surround table with ```</rule>
+    </rules>
+    <examples>
+      <example>
+        some text
+
+        | Table col       | col2 | col3 | col4 |
+        |--------------|---------|---------|---------|
+        | table content  | table content | table content | table content |
+        | table content        | table content| table content | table content |
+      
+        some text
+      </example>
+    </examples>
+  </table_formatting>
 
   <image_insertion>
     <format>
@@ -282,6 +309,7 @@ MARKDOWN_CONVERTER_PROMPT_GEMINI_2_v1 = """
       <rule>Insert images in order of appearance</rule>
       <rule>Preserve relative image width from original page</rule>
       <rule>Use image sources from {images}</rule>
+      <rule>If you see something which is visibly and image, don't convert it into text, replace it with image tag</rule>
     </rules>
   </image_insertion>
 
