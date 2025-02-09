@@ -34,13 +34,22 @@ class PDFImage:
     size: Tuple[int, int]  # (width, height)
 
 @dataclass
+class TOCEntry:
+    """Represents a table of contents entry"""
+    title: str
+    level: int
+    page_number: int
+
+@dataclass
 class Page:
     """Represents a processed PDF page with its content and metadata"""
     page_number: int
     content: str
     page_image: PageImage  # The full page converted to image
     images: List[PDFImage]  # List of images found on the page
-    titles: List[str]  # List of titles/headers found on the page
+    titles: List[TOCEntry]  # List of titles/headers found on the page
+
+
 
 class BaseConverter(ABC):
     def __init__(self, 
@@ -228,7 +237,12 @@ class BaseConverter(ABC):
             
             for future in as_completed(future_to_chunk):
                 try:
-                    self.pages.extend(future.result())
+                    def find_page_index(page_number: int) -> int:
+                        return next((i for i, p in enumerate(self.pages) if p.page_number == page_number), None)
+                    # self.pages[find_page_index(future.result()[0].page_number)] = future.result()[0]
+                    for page in future.result():
+                        self.pages[find_page_index(page.page_number)] = page
+                    # self.pages.extend(future.result())
                 except Exception as e:
                     print(f"Error processing chunk: {str(e)}")
         
@@ -298,3 +312,68 @@ class BaseConverter(ABC):
         ]
         
         return chunks
+
+    def _extract_toc(self):
+        """Extract table of contents and associate titles with pages"""
+        reader = PdfReader(self.doc_path)
+        def extract_toc(outlines, level=0):
+            for item in outlines:
+                if isinstance(item, list):
+                    extract_toc(item, level + 1)
+                else:
+                    page_index = next((i for i, page in enumerate(self.pages) if page.page_number == reader.get_destination_page_number(item) - 1), None)
+                    self.pages[page_index].titles = self.pages[page_index].titles + [
+                        TOCEntry(
+                            title=item.title,
+                            level=level,
+                            page_number=reader.get_destination_page_number(item)
+                        )
+                    ]
+                    # print(str(reader.get_destination_page_number(item)) + "  " * level + "- " + item.title)
+        outlines = reader.outline
+        extract_toc(outlines)
+    # def _extract_toc(self) -> Dict[int, List[TOCEntry]]:
+    #     """Extract table of contents and associate titles with pages
+        
+    #     Returns:
+    #         Dict[int, List[TOCEntry]]: Dictionary mapping page numbers to their TOC entries
+    #     """
+    #     reader = PdfReader(self.doc_path)
+        
+    #     # Initialize titles for all pages
+    #     page_titles: Dict[int, List[TOCEntry]] = {i: [] for i in range(len(reader.pages))}
+        
+    #     def process_outline(outlines, level=0):
+    #         """Recursively process outline items"""
+    #         for item in outlines:
+    #             if isinstance(item, list):
+    #                 process_outline(item, level + 1)
+    #             else:
+    #                 try:
+    #                     page_num = reader.get_destination_page_number(item)
+    #                     if page_num is not None:
+    #                         # Create TOCEntry and add to page's entries
+    #                         toc_entry = TOCEntry(
+    #                             title=item.title,
+    #                             level=level,
+    #                             page_number=page_num
+    #                         )
+    #                         page_titles[page_num].append(toc_entry)
+    #                 except Exception as e:
+    #                     print(f"Warning: Failed to process TOC item {item.title}: {str(e)}")
+        
+    #     # Process outline if it exists
+    #     if reader.outline:
+    #         try:
+    #             process_outline(reader.outline)
+    #         except Exception as e:
+    #             print(f"Warning: Failed to process table of contents: {str(e)}")
+        
+    #     # Update pages with their titles
+    #     for page in self.pages:
+    #         page.titles = [
+    #             entry.title 
+    #             for entry in page_titles.get(page.page_number, [])
+    #         ]
+        
+    #     return page_titles

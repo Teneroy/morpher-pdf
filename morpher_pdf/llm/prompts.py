@@ -313,6 +313,11 @@ MARKDOWN_CONVERTER_PROMPT_GEMINI_2_v1 = """
     </rules>
   </image_insertion>
 
+  <page_titles>
+    <rule>Whenever you see a title like the one in page_titles list, replace it with the header from page_titles with the same formatting</rule>
+    <rule>page_titles: {page_titles}</rule>
+  </page_titles>
+
   <output_format>
     <rule>Place converted text within <task_two>...</task_two> tags</rule>
     <rule>Use clean Markdown format</rule>
