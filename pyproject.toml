@@ -17,6 +17,9 @@ numpy = "^2.2.2"
 openai = "^1.60.2"
 google-genai = "^0.7.0"
 google-generativeai = "^0.8.4"
+langfuse = "^2.58.1"
+python-dotenv = "^1.0.1"
+pypdf = "^5.2.0"
 
 
 [build-system]

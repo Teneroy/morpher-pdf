@@ -1,11 +1,12 @@
 from enum import Enum
 from typing import Optional
-from .clients import BaseLLMClient, GPT4VisionClient, GeminiFlash1Client, GeminiFlash2Client
+from .clients import BaseLLMClient, GPT4VisionClient, GeminiFlash1Client, GeminiFlash2Client, GrokAIClient
 
 class LLMType(Enum):
     GPT4_VISION = "gpt4-vision"
     GEMINI_FLASH_1 = "gemini-flash-1"
     GEMINI_FLASH_2 = "gemini-flash-2"
+    GROK_AI = "grok-ai"
 
 class LLMFactory:
     @staticmethod
@@ -32,7 +33,8 @@ class LLMFactory:
         clients = {
             LLMType.GPT4_VISION: GPT4VisionClient,
             LLMType.GEMINI_FLASH_1: GeminiFlash1Client,
-            LLMType.GEMINI_FLASH_2: GeminiFlash2Client
+            LLMType.GEMINI_FLASH_2: GeminiFlash2Client,
+            LLMType.GROK_AI: GrokAIClient
         }
         
         client_class = clients.get(llm_type)
